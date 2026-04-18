@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Recursos - Windows Server</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f3f3f3; 
+            color: #000;
+            user-select: none;
+        }
+        .win-header { background-color: #2b3c4d; } /* Server Manager Dark Blue */
+        .win-panel { background: #ffffff; border: 1px solid #cccccc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .win-button { 
+            background: #e1e1e1; 
+            border: 1px solid #adadad; 
+            padding: 6px 12px; 
+            font-size: 12px;
+            transition: all 0.1s; 
+            color: #000;
+        }
+        .win-button:hover { background: #e5f1fb; border-color: #0078d7; }
+        .win-button:active { background: #cce4f7; border-color: #005499; }
+        .win-bar-bg { background-color: #e6e6e6; border: 1px solid #bcbcbc; height: 16px; position: relative;}
+        .win-bar-fill { background-color: #0078d7; height: 100%; transition: width 0.5s ease-in-out; }
+        .win-bar-fill.warning { background-color: #d7a100; }
+        .win-bar-fill.critical { background-color: #d70000; }
+        
+        .sidebar-item { padding: 8px 16px; font-size: 14px; cursor: pointer; color: #333; }
+        .sidebar-item:hover { background-color: #f0f0f0; }
+        .sidebar-item.active { background-color: #cce8ff; border-left: 3px solid #0078d7; }
+
+        .table-header { background-color: #f0f0f0; border-bottom: 1px solid #ccc; font-size: 12px; text-align: left; padding: 4px 8px; }
+        .table-row { font-size: 12px; border-bottom: 1px solid #eee; }
+        .table-row:hover { background-color: #e5f1fb; }
+        .table-cell { padding: 4px 8px; border-right: 1px solid #eee; }
+
+        .scrollbar-hide::-webkit-scrollbar { width: 8px; height: 8px; }
+        .scrollbar-hide::-webkit-scrollbar-track { background: #f1f1f1; }
+        .scrollbar-hide::-webkit-scrollbar-thumb { background: #c1c1c1; }
+        .scrollbar-hide::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Top Navigation Bar (Server Manager Style) -->
+    <header class="win-header text-white flex items-center justify-between px-4 py-2 select-none">
+        <div class="flex items-center gap-3">
+            <i data-lucide="server" class="w-5 h-5"></i>
+            <span class="text-sm font-semibold tracking-wide">Administrador del servidor | Monitor de Recursos</span>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+            <span class="flex items-center gap-1 hover:text-gray-300 cursor-pointer"><i data-lucide="rotate-cw" class="w-4 h-4"></i> Actualizar</span>
+            <span class="flex items-center gap-1 hover:text-gray-300 cursor-pointer"><i data-lucide="settings" class="w-4 h-4"></i> Administrar</span>
+            <span class="flex items-center gap-1 hover:text-gray-300 cursor-pointer"><i data-lucide="help-circle" class="w-4 h-4"></i> Ayuda</span>
+        </div>
+    </header>
+
+    <div class="flex flex-1 h-full overflow-hidden">
+        
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white border-r border-gray-300 flex flex-col pt-4 shadow-sm z-10">
+            <div class="sidebar-item active font-semibold">Panel</div>
+            <div class="sidebar-item">Servidor local</div>
+            <div class="sidebar-item">Todos los servidores</div>
+            <div class="sidebar-item">Servicios de archivos y alm...</div>
+            <div class="sidebar-item">Servicios de impresión</div>
+            <div class="sidebar-item">Active Directory (AD DS)</div>
+            
+            <div class="mt-auto p-4 border-t border-gray-200 bg-gray-50">
+                <p class="text-xs text-gray-500 mb-2">Acciones de Recuperación</p>
+                <button onclick="resetSimulation()" class="win-button w-full flex items-center justify-center gap-2">
+                    <i data-lucide="power" class="w-4 h-4 text-green-600"></i> Reiniciar Servicios
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col bg-[#f3f3f3] p-4 overflow-y-auto">
+            
+            <h1 class="text-2xl font-light text-[#003366] mb-4">Rendimiento del Servidor y Productividad</h1>
+
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+                
+                <!-- Performance Monitors -->
+                <div class="xl:col-span-2 win-panel p-4 flex flex-col gap-4">
+                    <h2 class="text-sm font-semibold border-b border-gray-200 pb-2 flex items-center gap-2">
+                        <i data-lucide="activity" class="w-4 h-4 text-blue-600"></i> Uso de Recursos
+                    </h2>
+                    
+                    <!-- CPU -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>CPU (Procesador)</span>
+                            <span id="lbl-cpu" class="font-bold">2%</span>
+                        </div>
+                        <div class="win-bar-bg">
+                            <div id="bar-cpu" class="win-bar-fill" style="width: 2%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Memoria -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>Memoria (RAM - 32GB)</span>
+                            <span id="lbl-ram" class="font-bold">18%</span>
+                        </div>
+                        <div class="win-bar-bg">
+                            <div id="bar-ram" class="win-bar-fill" style="width: 18%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Disco -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>Disco (C: , D: Compartido) - E/S</span>
+                            <span id="lbl-disk" class="font-bold">1%</span>
+                        </div>
+                        <div class="win-bar-bg">
+                            <div id="bar-disk" class="win-bar-fill" style="width: 1%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Red -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>Red (Ethernet 10Gbps)</span>
+                            <span id="lbl-net" class="font-bold">0%</span>
+                        </div>
+                        <div class="win-bar-bg">
+                            <div id="bar-net" class="win-bar-fill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Impacto de Productividad KPI -->
+                    <div class="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between bg-gray-50 p-3 border">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="users" class="w-8 h-8 text-gray-500"></i>
+                            <div>
+                                <div class="text-xs text-gray-500">Estado de la Red de Usuarios</div>
+                                <div id="kpi-status" class="text-sm font-bold text-green-600">Óptimo (Sin retrasos)</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-gray-500">Impacto en Productividad</div>
+                            <div id="kpi-prod" class="text-xl font-bold text-green-600">0% Pérdida</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulación de Errores (Botones) -->
+                <div class="win-panel p-4 flex flex-col">
+                    <h2 class="text-sm font-semibold border-b border-gray-200 pb-2 mb-3 flex items-center gap-2">
+                        <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-blue-600"></i> Simular Acciones de Usuarios
+                    </h2>
+                    <p class="text-xs text-gray-500 mb-4">Haga clic en los escenarios para simular la carga en el servidor y observar el impacto.</p>
+                    
+                    <div class="space-y-2 flex-1">
+                        <button onclick="triggerEvent('file_copy')" class="win-button w-full text-left flex items-start gap-2 group">
+                            <i data-lucide="files" class="w-4 h-4 mt-0.5 text-blue-600"></i>
+                            <div>
+                                <div class="font-semibold">Copia masiva de archivos</div>
+                                <div class="text-[10px] text-gray-500">Usuarios copiando archivos pesados desde la carpeta compartida.</div>
+                            </div>
+                        </button>
+
+                        <button onclick="triggerEvent('logon_storm')" class="win-button w-full text-left flex items-start gap-2 group">
+                            <i data-lucide="log-in" class="w-4 h-4 mt-0.5 text-blue-600"></i>
+                            <div>
+                                <div class="font-semibold">Tormenta de Inicios de Sesión</div>
+                                <div class="text-[10px] text-gray-500">Demasiados usuarios autenticándose en AD simultáneamente (9:00 AM).</div>
+                            </div>
+                        </button>
+
+                        <button onclick="triggerEvent('printer_spam')" class="win-button w-full text-left flex items-start gap-2 group">
+                            <i data-lucide="printer" class="w-4 h-4 mt-0.5 text-blue-600"></i>
+                            <div>
+                                <div class="font-semibold">Saturación de Impresión</div>
+                                <div class="text-[10px] text-gray-500">Uso excesivo de impresoras en red (planos pesados, PDF de 500 pags).</div>
+                            </div>
+                        </button>
+
+                        <button onclick="triggerEvent('bandwidth_hog')" class="win-button w-full text-left flex items-start gap-2 group">
+                            <i data-lucide="download-cloud" class="w-4 h-4 mt-0.5 text-blue-600"></i>
+                            <div>
+                                <div class="font-semibold">Congestión de Ancho de Banda</div>
+                                <div class="text-[10px] text-gray-500">Usuarios subiendo/descargando archivos personales innecesarios.</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Visor de Eventos (Event Viewer) -->
+            <div class="win-panel flex-1 flex flex-col min-h-[250px]">
+                <div class="bg-gray-100 border-b border-gray-300 px-3 py-2 text-xs font-semibold flex items-center gap-2">
+                    <i data-lucide="list" class="w-4 h-4 text-gray-600"></i>
+                    Visor de Eventos - Registros de Windows
+                </div>
+                
+                <!-- Table Header -->
+                <div class="flex bg-[#f0f0f0] border-b border-[#ccc] font-semibold text-xs">
+                    <div class="w-10 table-cell text-center border-r border-[#ccc]">Nivel</div>
+                    <div class="w-32 table-cell border-r border-[#ccc]">Fecha y hora</div>
+                    <div class="w-32 table-cell border-r border-[#ccc]">Origen</div>
+                    <div class="w-20 table-cell border-r border-[#ccc]">Id. del evento</div>
+                    <div class="flex-1 table-cell">Descripción de Impacto</div>
+                </div>
+
+                <!-- Table Body -->
+                <div id="event-logs" class="overflow-y-auto scrollbar-hide flex-1 bg-white">
+                    <div class="flex table-row text-gray-600">
+                        <div class="w-10 table-cell text-center"><i data-lucide="info" class="w-4 h-4 inline text-blue-500"></i></div>
+                        <div class="w-32 table-cell time-cell">--:--:--</div>
+                        <div class="w-32 table-cell">Service Control Manager</div>
+                        <div class="w-20 table-cell">7036</div>
+                        <div class="flex-1 table-cell">El servicio Administrador del servidor entró en estado en ejecución. Sistema estable.</div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Base System State
+        const baseState = { cpu: 2, ram: 18, disk: 1, net: 0 };
+        
+        let currentState = { ...baseState };
+        let activeEvents = new Set();
+
+        const scenarios = {
+            file_copy: {
+                cpu: 15, ram: 5, disk: 85, net: 45,
+                source: "srv (Servidor)", id: 2012, level: "warning",
+                log: "La cola de disco ha superado el umbral. Varios usuarios copiando archivos pesados (.iso, .mp4) desde la unidad D:. Impacto: Lentitud extrema al abrir documentos de Word/Excel alojados en el servidor para el resto de la empresa."
+            },
+            logon_storm: {
+                cpu: 75, ram: 15, disk: 10, net: 5,
+                source: "Netlogon", id: 5719, level: "error",
+                log: "Demasiados intentos de autenticación simultáneos. Cola de RPC llena. Impacto: Los usuarios que intentan iniciar sesión se quedan en la pantalla 'Aplicando directivas de grupo...' durante 5 a 10 minutos."
+            },
+            printer_spam: {
+                cpu: 40, ram: 25, disk: 60, net: 10,
+                source: "PrintService", id: 372, level: "warning",
+                log: "El servicio de cola de impresión (Spoolsv.exe) está utilizando demasiados recursos. Se están procesando archivos PDF masivos. Impacto: Los trabajos de impresión legítimos se retrasan, los discos se fragmentan y el servidor responde lento."
+            },
+            bandwidth_hog: {
+                cpu: 10, ram: 5, disk: 5, net: 98,
+                source: "Tcpip", id: 4227, level: "error",
+                log: "Límite de conexiones TCP alcanzado o ancho de banda saturado por descargas no corporativas. Impacto: Los sistemas ERP en la nube y el correo electrónico se desconectan. Productividad de la red totalmente paralizada por alta latencia."
+            }
+        };
+
+        function updateTimeCells() {
+            const now = new Date().toLocaleTimeString('es-ES');
+            document.querySelectorAll('.time-cell').forEach(cell => {
+                if (cell.innerText === '--:--:--') cell.innerText = now;
+            });
+        }
+        updateTimeCells();
+
+        function addLog(scenario) {
+            const logsContainer = document.getElementById('event-logs');
+            const now = new Date().toLocaleTimeString('es-ES');
+            
+            let iconHtml = '';
+            if(scenario.level === 'error') {
+                iconHtml = '<i data-lucide="x-circle" class="w-4 h-4 inline text-red-600"></i>';
+            } else if (scenario.level === 'warning') {
+                iconHtml = '<i data-lucide="alert-triangle" class="w-4 h-4 inline text-yellow-500"></i>';
+            } else {
+                iconHtml = '<i data-lucide="info" class="w-4 h-4 inline text-blue-500"></i>';
+            }
+
+            const rowHtml = `
+                <div class="flex table-row ${scenario.level === 'error' ? 'font-semibold text-red-800 bg-red-50' : 'text-gray-800'}">
+                    <div class="w-10 table-cell text-center flex items-center justify-center">${iconHtml}</div>
+                    <div class="w-32 table-cell">${now}</div>
+                    <div class="w-32 table-cell truncate" title="${scenario.source}">${scenario.source}</div>
+                    <div class="w-20 table-cell">${scenario.id}</div>
+                    <div class="flex-1 table-cell">${scenario.log}</div>
+                </div>
+            `;
+            
+            logsContainer.insertAdjacentHTML('afterbegin', rowHtml);
+            lucide.createIcons();
+        }
+
+        function updateUI() {
+            let cpu = baseState.cpu;
+            let ram = baseState.ram;
+            let disk = baseState.disk;
+            let net = baseState.net;
+            let productivityLoss = 0;
+            let isCritical = false;
+
+            activeEvents.forEach(evtId => {
+                const s = scenarios[evtId];
+                cpu += s.cpu;
+                ram += s.ram;
+                disk += s.disk;
+                net += s.net;
+                
+                if(s.level === 'error') isCritical = true;
+                
+                // Calculate pseudo productivity loss
+                if(evtId === 'file_copy') productivityLoss += 25;
+                if(evtId === 'logon_storm') productivityLoss += 40;
+                if(evtId === 'printer_spam') productivityLoss += 15;
+                if(evtId === 'bandwidth_hog') productivityLoss += 80;
+            });
+
+            // Cap values
+            cpu = Math.min(100, cpu);
+            ram = Math.min(100, ram);
+            disk = Math.min(100, disk);
+            net = Math.min(100, net);
+            productivityLoss = Math.min(100, productivityLoss);
+
+            // Update Bars and Labels
+            updateBar('cpu', cpu);
+            updateBar('ram', ram);
+            updateBar('disk', disk);
+            updateBar('net', net);
+
+            // Update Productivity KPIs
+            const kpiStatus = document.getElementById('kpi-status');
+            const kpiProd = document.getElementById('kpi-prod');
+
+            if (productivityLoss === 0) {
+                kpiStatus.innerText = "Óptimo (Sin retrasos)";
+                kpiStatus.className = "text-sm font-bold text-green-600";
+                kpiProd.className = "text-xl font-bold text-green-600";
+            } else if (productivityLoss < 50) {
+                kpiStatus.innerText = "Degradado (Lentitud reportada)";
+                kpiStatus.className = "text-sm font-bold text-yellow-600";
+                kpiProd.className = "text-xl font-bold text-yellow-600";
+            } else {
+                kpiStatus.innerText = "Crítico (Sistemas inaccesibles)";
+                kpiStatus.className = "text-sm font-bold text-red-600";
+                kpiProd.className = "text-xl font-bold text-red-600";
+            }
+            kpiProd.innerText = `${productivityLoss}% Pérdida`;
+        }
+
+        function updateBar(metric, value) {
+            document.getElementById(`lbl-${metric}`).innerText = `${value}%`;
+            const bar = document.getElementById(`bar-${metric}`);
+            bar.style.width = `${value}%`;
+            
+            bar.classList.remove('warning', 'critical');
+            if (value >= 90) bar.classList.add('critical');
+            else if (value >= 70) bar.classList.add('warning');
+        }
+
+        function triggerEvent(eventId) {
+            if (activeEvents.has(eventId)) return; // Prevent double trigger
+            
+            activeEvents.add(eventId);
+            addLog(scenarios[eventId]);
+            updateUI();
+        }
+
+        function resetSimulation() {
+            if (activeEvents.size === 0) return;
+            activeEvents.clear();
+            
+            addLog({
+                level: "info",
+                source: "System",
+                id: 104,
+                log: "El administrador ha reiniciado los servicios conflictivos y finalizado las sesiones bloqueadas. Los recursos han vuelto a la normalidad."
+            });
+            
+            updateUI();
+        }
+    </script>
+</body>
+</html>
